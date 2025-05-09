@@ -17,14 +17,12 @@ int main()
     int addrlen = sizeof(address);
     char buffer[BUFFER_SIZE];
 
-    // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
     {
         printf("WSAStartup failed. Error Code: %d\n", WSAGetLastError());
         return 1;
     }
 
-    // Create socket
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd == INVALID_SOCKET)
     {
@@ -37,7 +35,6 @@ int main()
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
 
-    // Bind
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) == SOCKET_ERROR)
     {
         printf("Bind failed. Error Code: %d\n", WSAGetLastError());
@@ -46,7 +43,6 @@ int main()
         return 1;
     }
 
-    // Listen
     if (listen(server_fd, 3) == SOCKET_ERROR)
     {
         printf("Listen failed. Error Code: %d\n", WSAGetLastError());
@@ -72,6 +68,7 @@ int main()
         int valread = recv(client_socket, buffer, BUFFER_SIZE, 0);
         if (valread <= 0)
             break;
+
         buffer[valread] = '\0';
 
         if (strcmp(buffer, "/exit") == 0)
@@ -81,7 +78,6 @@ int main()
         }
         else if (strncmp(buffer, "/send ", 6) == 0)
         {
-            // Extract filename
             char *filename = buffer + 6;
             FILE *fp = fopen(filename, "wb");
             if (fp == NULL)
@@ -90,26 +86,22 @@ int main()
                 continue;
             }
 
-            // Now receive the file data
             printf("Receiving file: %s\n", filename);
 
-            // Read data in chunks and write to the file
             while ((valread = recv(client_socket, buffer, BUFFER_SIZE, 0)) > 0)
             {
-                fwrite(buffer, 1, valread, fp); // Write to the file
-                if (valread < BUFFER_SIZE)      // End of file
+                fwrite(buffer, 1, valread, fp);
+                if (valread < BUFFER_SIZE)
                     break;
             }
 
-            fclose(fp); // Close the file after writing
+            fclose(fp);
             printf("File '%s' received and saved.\n", filename);
         }
         else
         {
-            // Normal chat message
             printf("Client: %s\n", buffer);
 
-            // Server reply
             printf("You (Server): ");
             fgets(buffer, BUFFER_SIZE, stdin);
             buffer[strcspn(buffer, "\n")] = 0;
@@ -118,6 +110,28 @@ int main()
             {
                 send(client_socket, buffer, strlen(buffer), 0);
                 break;
+            }
+            else if (strncmp(buffer, "/send ", 6) == 0)
+            {
+                char *filename = buffer + 6;
+                FILE *fp = fopen(filename, "rb");
+                if (fp == NULL)
+                {
+                    perror("File open error");
+                    continue;
+                }
+
+                send(client_socket, buffer, strlen(buffer), 0);
+                Sleep(100); // Give the client time to prepare
+
+                int n;
+                while ((n = fread(buffer, 1, BUFFER_SIZE, fp)) > 0)
+                {
+                    send(client_socket, buffer, n, 0);
+                }
+
+                fclose(fp);
+                printf("File '%s' sent to client.\n", filename);
             }
             else
             {

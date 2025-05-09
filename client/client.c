@@ -16,14 +16,12 @@ int main()
     struct sockaddr_in serv_addr;
     char buffer[BUFFER_SIZE];
 
-    // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
     {
         printf("WSAStartup failed. Error Code: %d\n", WSAGetLastError());
         return 1;
     }
 
-    // Create socket
     sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sock == INVALID_SOCKET)
     {
@@ -32,7 +30,6 @@ int main()
         return 1;
     }
 
-    // Server address setup
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(PORT);
     serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
@@ -52,7 +49,7 @@ int main()
     {
         printf("You (Client): ");
         fgets(buffer, BUFFER_SIZE, stdin);
-        buffer[strcspn(buffer, "\n")] = 0; // Remove newline
+        buffer[strcspn(buffer, "\n")] = 0;
 
         if (strcmp(buffer, "/exit") == 0)
         {
@@ -69,30 +66,53 @@ int main()
                 continue;
             }
 
-            // Send the filename first
             send(sock, buffer, strlen(buffer), 0);
+            Sleep(100); // Ensure the command is processed first
 
-            // Send the file in chunks
             int n;
             while ((n = fread(buffer, 1, BUFFER_SIZE, fp)) > 0)
             {
                 send(sock, buffer, n, 0);
             }
 
+            fclose(fp);
             printf("File sent successfully.\n");
-            fclose(fp); // Close the file after sending
         }
         else
         {
-            // Send regular chat messages
             send(sock, buffer, strlen(buffer), 0);
 
-            // Receive the server's response
             int bytesReceived = recv(sock, buffer, BUFFER_SIZE - 1, 0);
             if (bytesReceived > 0)
             {
                 buffer[bytesReceived] = '\0';
-                printf("Server: %s\n", buffer);
+
+                if (strncmp(buffer, "/send ", 6) == 0)
+                {
+                    char *filename = buffer + 6;
+                    FILE *fp = fopen(filename, "wb");
+                    if (fp == NULL)
+                    {
+                        perror("File open error");
+                        continue;
+                    }
+
+                    printf("Receiving file '%s' from server...\n", filename);
+
+                    while ((bytesReceived = recv(sock, buffer, BUFFER_SIZE, 0)) > 0)
+                    {
+                        fwrite(buffer, 1, bytesReceived, fp);
+                        if (bytesReceived < BUFFER_SIZE)
+                            break;
+                    }
+
+                    fclose(fp);
+                    printf("File '%s' received and saved.\n", filename);
+                }
+                else
+                {
+                    printf("Server: %s\n", buffer);
+                }
             }
         }
     }
